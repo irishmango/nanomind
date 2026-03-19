@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  devIndicators: false,
   reactCompiler: true,
+  serverExternalPackages: ['pdf-parse', '@anthropic-ai/sdk', '@langchain/anthropic', '@langchain/community', '@langchain/openai', '@langchain/textsplitters', '@langchain/core', 'langchain'],
 };
 
 export default nextConfig;
