@@ -33,109 +33,20 @@ AI research co-pilot for nanoscience and materials chemistry. Upload papers, ask
 
 ## Setup
 
-### 1. Clone and install
-
 ```bash
-git clone <repo>
+git clone https://github.com/yourname/nanomind
 cd nanomind
+cp .env.example .env.local   # fill in your keys
 npm install
+npm run setup                 # provisions your Supabase project
+npm run dev
 ```
 
-### 2. Supabase
+Open [http://localhost:3000](http://localhost:3000).
 
-Create a project at [supabase.com](https://supabase.com) and run the schema:
+### Environment variables
 
-```sql
--- Enable pgvector
-create extension if not exists vector;
-
--- Materials
-create table materials (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  formula text,
-  description text,
-  tags text[],
-  created_at timestamptz default now()
-);
-
--- Sessions
-create table sessions (
-  id uuid primary key default gen_random_uuid(),
-  material_id uuid references materials(id) on delete set null,
-  title text,
-  created_at timestamptz default now()
-);
-
--- Messages
-create table messages (
-  id uuid primary key default gen_random_uuid(),
-  session_id uuid references sessions(id) on delete cascade not null,
-  role text not null check (role in ('user','assistant')),
-  content text not null,
-  created_at timestamptz default now()
-);
-
--- Documents (RAG chunks)
-create table documents (
-  id uuid primary key default gen_random_uuid(),
-  material_id uuid references materials(id) on delete cascade,
-  content text not null,
-  embedding vector(768),
-  metadata jsonb default '{}',
-  created_at timestamptz default now()
-);
-
--- Notebook entries
-create table notebook_entries (
-  id uuid primary key default gen_random_uuid(),
-  session_id uuid references sessions(id) on delete cascade,
-  material_id uuid references materials(id) on delete set null,
-  technique text not null default 'general',
-  finding text not null,
-  confidence text not null check (confidence in ('high','medium','low')),
-  source text not null default 'AI',
-  created_at timestamptz default now()
-);
-
--- Vector similarity search function
-create or replace function match_documents(
-  query_embedding vector(768),
-  match_threshold float,
-  match_count int,
-  filter_material_id uuid
-)
-returns table (id uuid, content text, metadata jsonb, similarity float)
-language sql stable as $$
-  select id, content, metadata, 1 - (embedding <=> query_embedding) as similarity
-  from documents
-  where material_id = filter_material_id
-    and 1 - (embedding <=> query_embedding) > match_threshold
-  order by embedding <=> query_embedding
-  limit match_count;
-$$;
-
--- Grant access
-grant select, insert, update, delete on all tables in schema public to anon, authenticated;
-grant execute on function match_documents to anon, authenticated;
-
--- RLS (allow all for now — add user-scoped policies for production)
-alter table materials enable row level security;
-alter table sessions enable row level security;
-alter table messages enable row level security;
-alter table documents enable row level security;
-alter table notebook_entries enable row level security;
-
-create policy "allow all" on materials for all using (true);
-create policy "allow all" on sessions for all using (true);
-create policy "allow all" on messages for all using (true);
-create policy "allow all" on documents for all using (true);
-create policy "allow all" on notebook_entries for all using (true);
-```
-
-### 3. Environment variables
-
-Copy `.env.local.example` to `.env.local` and fill in:
+Copy `.env.example` to `.env.local` and fill in all values:
 
 ```bash
 # Required
@@ -144,32 +55,19 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 ANTHROPIC_API_KEY=sk-ant-...
 
+# Required for npm run setup (Supabase dashboard → Settings → Database → URI)
+DATABASE_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+
 # Optional — enables document embeddings and agent tools
 HUGGINGFACE_API_KEY=hf_...
 MATERIALS_PROJECT_API_KEY=...
 ```
 
-**HuggingFace token**: create a token at huggingface.co/settings/tokens with "Make calls to Inference Providers" permission enabled.
+**Supabase**: create a free project at [supabase.com](https://supabase.com). Find `DATABASE_URL` under Settings → Database → Connection string (URI mode).
 
-**Materials Project key**: register at next-gen.materialsproject.org and copy your API key from your dashboard.
+**HuggingFace token**: create a token at huggingface.co/settings/tokens — enable "Make calls to Inference Providers".
 
-### 4. Seed materials
-
-Insert at least one row into the `materials` table (via Supabase dashboard or SQL):
-
-```sql
-insert into materials (name, formula, description, tags) values
-  ('Titanium Dioxide', 'TiO₂', 'Wide-bandgap semiconductor used in photocatalysis.', array['photocatalysis','semiconductor']),
-  ('Graphene Oxide', null, 'Oxidised graphene with functional surface groups.', array['2D material','carbon']);
-```
-
-### 5. Run
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
+**Materials Project key**: register at next-gen.materialsproject.org → API keys.
 
 ## Usage
 
