@@ -223,7 +223,30 @@ async function main() {
 
   if (!isNanoMindProject()) {
     // Fresh install — user ran npx nanomind-ai from an empty directory
-    console.log(chalk.white('  First time setup detected. Let\'s get you configured.\n'))
+    const g = chalk.dim.gray
+    const a = accent
+    console.log(chalk.white('  NanoMind is an open-source AI research co-pilot for'))
+    console.log(chalk.white('  nanoscience and materials chemistry. It runs locally'))
+    console.log(chalk.white('  in your browser and uses your own API keys — your data'))
+    console.log(chalk.white('  never leaves your infrastructure.'))
+    console.log()
+    console.log(chalk.white('  Before we begin, you will need:'))
+    console.log()
+    console.log(a('  ◆ A Supabase account (free)') + g(' — supabase.com'))
+    console.log(g('    Create a project and grab your URL + API keys from'))
+    console.log(g('    Settings → API'))
+    console.log()
+    console.log(a('  ◆ An Anthropic API key') + g(' — console.anthropic.com'))
+    console.log()
+    console.log(a('  ◆ A HuggingFace token (free)') + g(' — huggingface.co/settings/tokens'))
+    console.log(g('    Enable "Make calls to Inference Providers"'))
+    console.log()
+    console.log(a('  ◆ A Materials Project API key (free)') + g(' — materialsproject.org'))
+    console.log(g('    ') + chalk.yellow('Optional') + g(' — enables live crystal structure + property lookups'))
+    console.log()
+    console.log(chalk.bold.white('  Setup takes about 2 minutes. Let\'s go.'))
+    console.log(chalk.dim('  ──────────────────────────────────────────'))
+    console.log()
 
     scaffoldProject()
     console.log()
