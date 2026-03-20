@@ -1,5 +1,5 @@
 {
-  "name": "nanomind",
+  "name": "nanomind-ai",
   "version": "0.1.0",
   "description": "AI research co-pilot for nanoscience and materials chemistry",
   "keywords": [
@@ -34,7 +34,7 @@
     ".env.example"
   ],
   "bin": {
-    "nanomind": "./scripts/cli.ts"
+    "nanomind-ai": "./scripts/cli.ts"
   },
   "scripts": {
     "dev": "next dev",
