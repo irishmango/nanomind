@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useChat, type Material } from '@/context/ChatContext'
 import UploadPanel from '@/components/UploadPanel'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type Session = {
   id: string
@@ -30,6 +31,8 @@ export default function Sidebar() {
   const [sessionsLoading, setSessionsLoading] = useState(true)
 
   const [creating, setCreating] = useState(false)
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState<string | null>(null)
+  const [confirmDeleteMaterial, setConfirmDeleteMaterial] = useState<string | null>(null)
 
   // Add material form
   const [addingMaterial, setAddingMaterial] = useState(false)
@@ -124,15 +127,21 @@ export default function Sidebar() {
     }
   }
 
-  async function handleDeleteSession(e: React.MouseEvent, id: string) {
-    e.stopPropagation()
+  async function handleDeleteSession(id: string) {
     await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
     setSessions((prev) => prev.filter((s) => s.id !== id))
-    // If deleting the active session, clear it
     if (sessionId === id) {
       setSessionId(null)
       setMessages([])
     }
+    setConfirmDeleteSession(null)
+  }
+
+  async function handleDeleteMaterial(id: string) {
+    await fetch(`/api/materials/${id}`, { method: 'DELETE' })
+    setMaterials((prev) => prev.filter((x) => x.id !== id))
+    if (activeMaterial?.id === id) setActiveMaterial(null)
+    setConfirmDeleteMaterial(null)
   }
 
   return (
@@ -211,7 +220,7 @@ export default function Sidebar() {
                         )}
                       </button>
                       <button
-                        onClick={(e) => handleDeleteSession(e, s.id)}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteSession(s.id) }}
                         className="shrink-0 mr-1.5 w-5 h-5 flex items-center justify-center
                           rounded text-white/0 group-hover:text-white/30
                           hover:!text-white/60 hover:bg-white/[0.08] transition-colors"
@@ -357,13 +366,7 @@ export default function Sidebar() {
                       )}
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        fetch(`/api/materials/${m.id}`, { method: 'DELETE' }).then(() => {
-                          setMaterials((prev) => prev.filter((x) => x.id !== m.id))
-                          if (activeMaterial?.id === m.id) setActiveMaterial(null)
-                        })
-                      }}
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteMaterial(m.id) }}
                       className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center
                         rounded text-white/0 group-hover:text-white/30
                         hover:!text-white/60 hover:bg-white/[0.08] transition-colors"
@@ -382,6 +385,21 @@ export default function Sidebar() {
       <UploadPanel />
 
       {/* Model badge */}
+      {confirmDeleteSession && (
+        <ConfirmModal
+          message="Delete this session? All messages will be permanently removed."
+          onConfirm={() => handleDeleteSession(confirmDeleteSession)}
+          onCancel={() => setConfirmDeleteSession(null)}
+        />
+      )}
+
+      {confirmDeleteMaterial && (
+        <ConfirmModal
+          message="Delete this material? All associated sessions and documents will also be removed."
+          onConfirm={() => handleDeleteMaterial(confirmDeleteMaterial)}
+          onCancel={() => setConfirmDeleteMaterial(null)}
+        />
+      )}
       <div className="px-4 py-3 border-t border-white/[0.06]">
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-[#00D4AA] animate-pulse" />

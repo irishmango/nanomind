@@ -12,11 +12,20 @@ export type Material = {
   created_at: string
 }
 
+export type ToolCall = {
+  tool: string
+  input: string
+  result: string
+}
+
 export type Message = {
   id: string
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
+  isAgent?: boolean
+  toolCalls?: ToolCall[]
+  source?: string
 }
 
 type ChatContextValue = {
@@ -74,12 +83,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const assistantId = crypto.randomUUID()
       setMessages((prev) => [
         ...prev,
-        { id: assistantId, role: 'assistant', content: '', streaming: true },
+        { id: assistantId, role: 'assistant', content: '', streaming: true, isAgent: agentMode },
       ])
 
       try {
         const endpoint = agentMode ? '/api/agent' : '/api/chat'
-      const res = await fetch(endpoint, {
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -94,17 +103,67 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
 
+        // For agent mode: buffer the start of the stream to extract __TOOL__ prefix
+        let toolCallsExtracted = !agentMode
+        let prefixBuffer = ''
+        let extractedToolCalls: ToolCall[] | undefined
+        let streamedContent = ''
+
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
           const chunk = decoder.decode(value, { stream: true })
+
+          if (!toolCallsExtracted) {
+            prefixBuffer += chunk
+            const newlineIdx = prefixBuffer.indexOf('\n')
+            if (newlineIdx !== -1) {
+              const firstLine = prefixBuffer.slice(0, newlineIdx)
+              const rest = prefixBuffer.slice(newlineIdx + 1)
+              if (firstLine.startsWith('__TOOL__')) {
+                try {
+                  extractedToolCalls = JSON.parse(firstLine.slice('__TOOL__'.length)) as ToolCall[]
+                } catch { /* ignore malformed */ }
+              }
+              streamedContent = rest
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, toolCalls: extractedToolCalls, content: rest }
+                    : m,
+                ),
+              )
+              toolCallsExtracted = true
+              prefixBuffer = ''
+            }
+            // otherwise keep buffering
+          } else {
+            streamedContent += chunk
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m)),
+            )
+          }
+        }
+
+        // Flush buffer if __TOOL__ line never resolved (very short / no-newline response)
+        if (!toolCallsExtracted && prefixBuffer) {
+          streamedContent = prefixBuffer
           setMessages((prev) =>
-            prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m)),
+            prev.map((m) => (m.id === assistantId ? { ...m, content: prefixBuffer } : m)),
           )
         }
 
+        // Derive source badge
+        let source = 'AI knowledge'
+        if (extractedToolCalls && extractedToolCalls.length > 0) {
+          source = 'via Materials Project'
+        } else {
+          const fileMatch = streamedContent.match(/\b([\w\-.]+\.(pdf|txt|md))\b/i)
+          if (fileMatch) source = `via ${fileMatch[1]}`
+        }
+
         setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m)),
+          prev.map((m) => (m.id === assistantId ? { ...m, streaming: false, source } : m)),
         )
       } catch (err) {
         const errText = err instanceof Error ? err.message : 'Unknown error'

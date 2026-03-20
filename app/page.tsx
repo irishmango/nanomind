@@ -46,18 +46,22 @@ export default function Home() {
           ◈ Notebook
         </Link>
 
-        {/* Agent mode toggle */}
+        {/* Live data toggle */}
         <button
           onClick={() => setAgentMode(!agentMode)}
-          className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono text-[11px] transition-colors
+          className={`shrink-0 flex flex-col items-start px-2.5 py-1.5 rounded-md font-mono transition-colors
             ${agentMode
               ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
               : 'text-white/25 border border-white/[0.08] hover:text-white/40'
             }`}
-          title={agentMode ? 'Agent mode on — uses tools (Materials Project, HuggingFace)' : 'Enable agent mode'}
         >
-          <span>{agentMode ? '◆' : '◇'}</span>
-          <span>Agent</span>
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span>{agentMode ? '◆' : '◇'}</span>
+            <span>Live data</span>
+          </div>
+          <span className="text-[9px] leading-tight mt-0.5 opacity-70">
+            {agentMode ? 'AI · papers · MP API' : 'Off: AI + papers  |  On: + MP API'}
+          </span>
         </button>
 
         {/* Tab switcher — only when material is selected */}

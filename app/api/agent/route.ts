@@ -55,19 +55,18 @@ export async function POST(request: Request) {
           material_id: material_id ?? null,
         })
 
-        // Emit tool-use summary before the final answer
+        // Emit structured tool metadata as a parseable prefix (not accumulated into assistantContent)
         const steps: AgentStep[] = result.intermediateSteps ?? []
         if (steps.length > 0) {
-          send('**Tools used:**\n')
-          for (const step of steps) {
-            const toolName = step.action.tool
-            const toolInput = JSON.stringify(step.action.toolInput)
-            const toolOutput = typeof step.observation === 'string'
-              ? step.observation.slice(0, 300) + (step.observation.length > 300 ? '…' : '')
+          const toolMeta = steps.map((step) => {
+            const inputObj = step.action.toolInput as Record<string, unknown>
+            const input = String(Object.values(inputObj)[0] ?? '')
+            const result = typeof step.observation === 'string'
+              ? step.observation.slice(0, 150)
               : String(step.observation)
-            send(`\n- **${toolName}** \`${toolInput}\`\n  > ${toolOutput}\n`)
-          }
-          send('\n---\n\n')
+            return { tool: step.action.tool, input, result }
+          })
+          controller.enqueue(encoder.encode(`__TOOL__${JSON.stringify(toolMeta)}\n`))
         }
 
         send(result.output)
