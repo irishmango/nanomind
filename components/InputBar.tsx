@@ -13,7 +13,7 @@ const QUICK_QUERIES = [
 ]
 
 export default function InputBar() {
-  const { sendMessage, isLoading, messages } = useChat()
+  const { sendMessage, stopGeneration, isLoading, messages } = useChat()
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -80,24 +80,38 @@ export default function InputBar() {
           />
         </div>
 
-        <button
-          onClick={submit}
-          disabled={isLoading || !value.trim()}
-          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg
-            bg-[#00D4AA] hover:bg-[#00D4AA]/90 disabled:bg-white/10
-            text-[#0A0C0F] disabled:text-white/20 transition-colors
-            disabled:cursor-not-allowed"
-          aria-label="Send"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="w-4 h-4"
+        {isLoading ? (
+          <button
+            onClick={stopGeneration}
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg
+              bg-[#FF5E5E] hover:bg-[#FF5E5E]/80 transition-colors animate-pulse"
+            aria-label="Stop generation"
           >
-            <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.154.75.75 0 0 0 0-1.115A28.897 28.897 0 0 0 3.105 2.288Z" />
-          </svg>
-        </button>
+            {/* Filled square stop icon */}
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-[#1a0505]">
+              <rect x="4" y="4" width="12" height="12" rx="1" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            onClick={submit}
+            disabled={!value.trim()}
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg
+              bg-[#00D4AA] hover:bg-[#00D4AA]/90 disabled:bg-white/10
+              text-[#0A0C0F] disabled:text-white/20 transition-colors
+              disabled:cursor-not-allowed"
+            aria-label="Send"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-4 h-4"
+            >
+              <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.154.75.75 0 0 0 0-1.115A28.897 28.897 0 0 0 3.105 2.288Z" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <p className="mt-1.5 text-[10px] font-mono text-white/20 text-center">

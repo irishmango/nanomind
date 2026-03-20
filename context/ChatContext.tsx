@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import { useSession } from '@/hooks/useSession'
 
 export type Material = {
@@ -48,6 +48,7 @@ type ChatContextValue = {
   setAgentMode: (v: boolean) => void
   loadSession: (id: string) => Promise<void>
   sendMessage: (text: string) => Promise<void>
+  stopGeneration: () => void
   retryLast: () => Promise<void>
 }
 
@@ -57,6 +58,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [activeMaterials, setActiveMaterials] = useState<Material[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [agentMode, setAgentMode] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  const stopGeneration = useCallback(() => {
+    abortControllerRef.current?.abort()
+    setIsLoading(false)
+  }, [])
 
   const { sessionId, setSessionId, messages, setMessages, isHydrating, loadSession } =
     useSession()
@@ -64,6 +71,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(
     async (text: string) => {
       if (isLoading) return
+
+      abortControllerRef.current = new AbortController()
+      const { signal } = abortControllerRef.current
 
       // Ensure a session exists
       let sid = sessionId
@@ -109,6 +119,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           const res = await fetch('/api/agent', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal,
             body,
           })
           if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -137,6 +148,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal,
             body,
           })
           if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
@@ -145,14 +157,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           const decoder = new TextDecoder()
           let streamedContent = ''
 
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            const chunk = decoder.decode(value, { stream: true })
-            streamedContent += chunk
-            setMessages((prev) =>
-              prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m)),
-            )
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              const chunk = decoder.decode(value, { stream: true })
+              streamedContent += chunk
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m)),
+              )
+            }
+          } catch (e) {
+            if ((e as Error).name !== 'AbortError') throw e
+            // Aborted — keep partial text, fall through to set streaming: false
           }
 
           // Derive source badge from streamed content
@@ -167,12 +184,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           )
         }
       } catch (err) {
-        const errText = err instanceof Error ? err.message : 'Unknown error'
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, content: `Error: ${errText}`, streaming: false } : m,
-          ),
-        )
+        if ((err as Error).name === 'AbortError') {
+          // User stopped generation — keep partial content, clear streaming flag
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m)),
+          )
+        } else {
+          const errText = err instanceof Error ? err.message : 'Unknown error'
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: `Error: ${errText}`, streaming: false } : m,
+            ),
+          )
+        }
       } finally {
         setIsLoading(false)
       }
@@ -205,6 +229,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setAgentMode,
         loadSession,
         sendMessage,
+        stopGeneration,
         retryLast,
       }}
     >
