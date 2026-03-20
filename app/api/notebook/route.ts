@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
+  const session_id = searchParams.get('session_id')
   const material_id = searchParams.get('material_id')
   const technique = searchParams.get('technique')
   const confidence = searchParams.get('confidence')
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
     `)
     .order('created_at', { ascending: false })
 
+  if (session_id) query = query.eq('session_id', session_id)
   if (material_id) query = query.eq('material_id', material_id)
   if (technique) query = query.eq('technique', technique)
   if (confidence) query = query.eq('confidence', confidence)

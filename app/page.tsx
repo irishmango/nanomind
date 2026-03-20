@@ -1,18 +1,31 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { useChat } from '@/context/ChatContext'
 import MessageList from '@/components/MessageList'
 import InputBar from '@/components/InputBar'
 import WelcomeScreen from '@/components/WelcomeScreen'
 import SpectraPanel from '@/components/SpectraPanel'
+import NotebookTab from '@/components/tabs/NotebookTab'
+import DocumentsTab from '@/components/tabs/DocumentsTab'
 
-type Tab = 'chat' | 'spectra'
+type Tab = 'chat' | 'spectra' | 'notebook' | 'documents'
+
+const TAB_LABELS: Record<Tab, string> = {
+  chat: '⬡ Chat',
+  spectra: '◈ Spectra',
+  notebook: '◈ Notebook',
+  documents: '↑ Docs',
+}
 
 export default function Home() {
-  const { messages, activeMaterial, agentMode, setAgentMode } = useChat()
+  const { messages, activeMaterial, agentMode, setAgentMode, sessionId } = useChat()
   const [tab, setTab] = useState<Tab>('chat')
+
+  // Reset to chat whenever session changes
+  useEffect(() => {
+    setTab('chat')
+  }, [sessionId])
 
   return (
     <div className="flex flex-col h-full">
@@ -38,14 +51,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Notebook link */}
-        <Link
-          href="/notebook"
-          className="shrink-0 px-2.5 py-1 rounded-md font-mono text-[11px] text-white/25 border border-white/[0.08] hover:text-white/50 hover:border-white/20 transition-colors"
-        >
-          ◈ Notebook
-        </Link>
-
         {/* Live data toggle */}
         <button
           onClick={() => setAgentMode(!agentMode)}
@@ -64,10 +69,10 @@ export default function Home() {
           </span>
         </button>
 
-        {/* Tab switcher — only when material is selected */}
-        {activeMaterial && (
+        {/* Tab switcher — only when session is active */}
+        {sessionId && (
           <div className="flex gap-1 shrink-0">
-            {(['chat', 'spectra'] as Tab[]).map((t) => (
+            {(['chat', 'spectra', 'notebook', 'documents'] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -77,7 +82,7 @@ export default function Home() {
                     : 'text-white/30 border border-white/[0.08] hover:text-white/50 hover:border-white/20'
                   }`}
               >
-                {t === 'chat' ? '⬡ Chat' : '◈ Spectra'}
+                {TAB_LABELS[t]}
               </button>
             ))}
           </div>
@@ -94,6 +99,20 @@ export default function Home() {
       <div className={`flex-1 overflow-y-auto ${tab === 'spectra' ? '' : 'hidden'}`}>
         <SpectraPanel fullWidth />
       </div>
+
+      {/* Notebook tab */}
+      {tab === 'notebook' && (
+        <div className="flex flex-col flex-1 min-h-0">
+          <NotebookTab sessionId={sessionId} />
+        </div>
+      )}
+
+      {/* Documents tab */}
+      {tab === 'documents' && (
+        <div className="flex flex-col flex-1 min-h-0">
+          <DocumentsTab sessionId={sessionId} />
+        </div>
+      )}
     </div>
   )
 }

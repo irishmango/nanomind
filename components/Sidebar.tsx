@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useChat, type Material } from '@/context/ChatContext'
-import UploadPanel from '@/components/UploadPanel'
 import ConfirmModal from '@/components/ConfirmModal'
 
 type Session = {
@@ -381,8 +380,6 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
-
-      <UploadPanel />
 
       {/* Model badge */}
       {confirmDeleteSession && (
