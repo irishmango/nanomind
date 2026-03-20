@@ -1,4 +1,4 @@
-# NanoMind
+n# NanoMind
 
 AI research co-pilot for nanoscience and materials chemistry. Upload papers, ask questions grounded in the literature, visualise spectra, and automatically log experimental findings.
 

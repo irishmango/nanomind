@@ -11,6 +11,7 @@ export async function POST(request: Request) {
   const formData = await request.formData()
   const file = formData.get('file') as File | null
   const material_id = formData.get('material_id') as string | null
+  const session_id = formData.get('session_id') as string | null
 
   if (!file) {
     return Response.json({ error: 'file is required' }, { status: 400 })
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const rows = chunks.map((content, i) => ({
     material_id,
+    session_id: session_id ?? null,
     filename,
     chunk_index: i,
     content,

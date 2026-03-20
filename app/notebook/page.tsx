@@ -2,6 +2,13 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useChat } from '@/context/ChatContext'
+
+type Document = {
+  filename: string
+  created_at: string
+  chunk_count: number
+}
 
 type Entry = {
   id: string
@@ -71,11 +78,15 @@ function exportCSV(entries: Entry[]) {
 }
 
 export default function NotebookPage() {
+  const { sessionId } = useChat()
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
   const [techniqueFilter, setTechniqueFilter] = useState('')
   const [confidenceFilter, setConfidenceFilter] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [deletingDoc, setDeletingDoc] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/notebook')
@@ -83,6 +94,21 @@ export default function NotebookPage() {
       .then((d) => setEntries(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!sessionId) { setDocuments([]); return }
+    fetch(`/api/documents?session_id=${sessionId}`)
+      .then((r) => r.json())
+      .then((d) => setDocuments(Array.isArray(d) ? d : []))
+  }, [sessionId])
+
+  async function deleteDocument(filename: string) {
+    if (!sessionId) return
+    setDeletingDoc(filename)
+    await fetch(`/api/documents?session_id=${sessionId}&filename=${encodeURIComponent(filename)}`, { method: 'DELETE' })
+    setDocuments((prev) => prev.filter((d) => d.filename !== filename))
+    setDeletingDoc(null)
+  }
 
   const techniques = useMemo(
     () => [...new Set(entries.map((e) => e.technique))].sort(),
@@ -181,6 +207,54 @@ export default function NotebookPage() {
             {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
           </span>
         </div>
+
+        {/* Documents */}
+        {sessionId && (
+          <div className="mb-10">
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="font-sans text-sm font-semibold text-white/70">Uploaded documents</h2>
+              <span className="font-mono text-[10px] text-white/25">{documents.length} file{documents.length !== 1 ? 's' : ''}</span>
+              <div className="flex-1 h-px bg-white/[0.06]" />
+            </div>
+            {documents.length === 0 ? (
+              <p className="font-mono text-xs text-white/25 px-1">No documents uploaded in this session.</p>
+            ) : (
+              <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                      <th className="text-left px-4 py-2.5 font-mono text-[10px] text-white/30 uppercase tracking-widest">Filename</th>
+                      <th className="text-left px-4 py-2.5 font-mono text-[10px] text-white/30 uppercase tracking-widest w-20">Chunks</th>
+                      <th className="text-left px-4 py-2.5 font-mono text-[10px] text-white/30 uppercase tracking-widest w-36 hidden md:table-cell">Uploaded</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc) => (
+                      <tr key={doc.filename} className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs text-white/70 truncate max-w-[200px]">{doc.filename}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-white/40">{doc.chunk_count}</td>
+                        <td className="px-4 py-3 hidden md:table-cell">
+                          <span className="font-mono text-[10px] text-white/30">{formatDate(doc.created_at)}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <button
+                            onClick={() => deleteDocument(doc.filename)}
+                            disabled={deletingDoc === doc.filename}
+                            className="text-white/15 hover:text-red-400/60 transition-colors font-mono text-xs disabled:opacity-40"
+                            aria-label="Delete document"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Content */}
         {loading ? (

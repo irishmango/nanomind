@@ -20,7 +20,8 @@ Focus especially on:
 
 export async function retrieveContext(
   query: string,
-  materialId: string,
+  _materialId: string,
+  sessionId: string | null = null,
   k = 8,
 ): Promise<string> {
   const enhancedQuery = buildEnhancedQuery(query)
@@ -34,6 +35,7 @@ export async function retrieveContext(
     query_embedding: queryEmbedding,
     match_threshold: 0.3,
     match_count: k,
+    match_session_id: sessionId ?? null,
   })
 
   if (error) throw new Error(`Retrieval failed: ${error.message}`)

@@ -128,7 +128,7 @@ export async function POST(request: Request) {
   let ragContext = ''
   if (material_id) {
     try {
-      ragContext = await retrieveContext(message, material_id)
+      ragContext = await retrieveContext(message, material_id, session_id)
     } catch (e) {
       console.error('RAG retrieval error:', e)
     }

@@ -10,7 +10,7 @@ type UploadState =
   | { status: 'error'; message: string }
 
 export default function UploadPanel() {
-  const { activeMaterial } = useChat()
+  const { activeMaterial, sessionId } = useChat()
   const [state, setState] = useState<UploadState>({ status: 'idle' })
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -34,6 +34,7 @@ export default function UploadPanel() {
     const form = new FormData()
     form.append('file', file)
     form.append('material_id', activeMaterial.id)
+    if (sessionId) form.append('session_id', sessionId)
 
     await new Promise<void>((resolve) => {
       const xhr = new XMLHttpRequest()
@@ -91,6 +92,13 @@ export default function UploadPanel() {
         Upload document
       </p>
 
+      {!sessionId ? (
+        <div className="rounded-lg border border-dashed border-white/[0.08] px-3 py-4 text-center">
+          <p className="font-mono text-[10px] text-white/25 leading-relaxed">
+            Start a conversation first<br />to upload documents
+          </p>
+        </div>
+      ) : (
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
@@ -145,6 +153,7 @@ export default function UploadPanel() {
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }
