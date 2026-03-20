@@ -34,7 +34,7 @@
     ".env.example"
   ],
   "bin": {
-    "nanomind-ai": "./scripts/cli.ts"
+    "nanomind-ai": "./scripts/cli.js"
   },
   "scripts": {
     "dev": "next dev",
