@@ -180,7 +180,18 @@ export default function MessageList() {
                     {msg.content}
                   </ReactMarkdown>
                   {msg.streaming && (
-                    <span className="inline-block w-0.5 h-3.5 bg-[#00D4AA] ml-0.5 animate-pulse align-middle" />
+                    <>
+                      <span
+                        className="inline-block ml-0.5 text-[#00D4AA] align-middle leading-none"
+                        style={{ animation: 'cursor-blink 1s step-start infinite' }}
+                      >▋</span>
+                      <style>{`
+                        @keyframes cursor-blink {
+                          0%, 100% { opacity: 1; }
+                          50% { opacity: 0; }
+                        }
+                      `}</style>
+                    </>
                   )}
                   {!msg.streaming && msg.content.startsWith('[error') && (
                     <button
