@@ -1,23 +1,26 @@
 #!/usr/bin/env tsx
 
-import { existsSync, readFileSync, writeFileSync } from 'fs'
-import { createServer } from 'http'
+import { existsSync, readFileSync, writeFileSync, cpSync } from 'fs'
+import { spawn, execSync } from 'child_process'
 import { resolve } from 'path'
 import { config } from 'dotenv'
 import chalk from 'chalk'
 import ora from 'ora'
 import open from 'open'
-import next from 'next'
 import { prompt } from 'enquirer'
 import { createClient } from '@supabase/supabase-js'
 import { runSetup } from './setup-db.js'
 
-const ENV_PATH = resolve(process.cwd(), '.env.local')
+// When run via npx, __dirname is the package's scripts/ dir inside the npx cache.
+// PKG_ROOT is the package root one level up — contains app/, components/, etc.
+const PKG_ROOT = resolve(__dirname, '..')
+const CWD = process.cwd()
+const ENV_PATH = resolve(CWD, '.env.local')
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 const accent = chalk.hex('#00D4AA')
 const dim = chalk.hex('#00D4AA').dim
 
-// ── ASCII header ──────────────────────────────────────────────────────────────
+// ── ASCII header ───────────────────────────────────────────────────────────────
 
 function printHeader() {
   console.log()
@@ -30,7 +33,11 @@ function printHeader() {
   console.log()
 }
 
-// ── env helpers ───────────────────────────────────────────────────────────────
+// ── project detection ─────────────────────────────────────────────────────────
+
+function isNanoMindProject(): boolean {
+  return existsSync(resolve(CWD, 'next.config.ts')) || existsSync(ENV_PATH)
+}
 
 function isConfigured(): boolean {
   if (!existsSync(ENV_PATH)) return false
@@ -40,6 +47,44 @@ function isConfigured(): boolean {
     /ANTHROPIC_API_KEY=\S+/.test(contents)
   )
 }
+
+// ── scaffold ──────────────────────────────────────────────────────────────────
+
+function scaffoldProject() {
+  const spinner = ora('Creating project files…').start()
+  const dirs = ['app', 'components', 'context', 'lib', 'public', 'scripts']
+  const files = [
+    'next.config.ts',
+    'tsconfig.json',
+    'tailwind.config.ts',
+    'postcss.config.mjs',
+    '.env.example',
+    'package.json',
+  ]
+
+  for (const dir of dirs) {
+    const src = resolve(PKG_ROOT, dir)
+    if (existsSync(src)) cpSync(src, resolve(CWD, dir), { recursive: true })
+  }
+  for (const file of files) {
+    const src = resolve(PKG_ROOT, file)
+    if (existsSync(src)) cpSync(src, resolve(CWD, file))
+  }
+  spinner.succeed(accent('Project files created'))
+}
+
+function installDependencies() {
+  const spinner = ora('Installing dependencies (this may take a minute)…').start()
+  try {
+    execSync('npm install', { cwd: CWD, stdio: 'pipe' })
+    spinner.succeed(accent('Dependencies installed'))
+  } catch (err) {
+    spinner.fail(chalk.red('npm install failed'))
+    throw err
+  }
+}
+
+// ── env helpers ────────────────────────────────────────────────────────────────
 
 function writeEnv(values: Record<string, string>) {
   const lines = [
@@ -54,12 +99,10 @@ function writeEnv(values: Record<string, string>) {
   writeFileSync(ENV_PATH, lines.join('\n') + '\n', 'utf-8')
 }
 
-// ── setup flow ────────────────────────────────────────────────────────────────
+// ── prompts ───────────────────────────────────────────────────────────────────
 
-async function setupFlow() {
-  console.log(chalk.white('  No configuration found. Let\'s set up NanoMind.\n'))
-
-  const answers = await prompt<{
+async function promptForKeys() {
+  return prompt<{
     supabaseUrl: string
     anonKey: string
     serviceKey: string
@@ -109,15 +152,11 @@ async function setupFlow() {
       message: 'Materials Project API key (optional — for Live data mode)',
     },
   ])
+}
 
-  console.log()
-  writeEnv(answers)
-  console.log(accent('  ✓ .env.local written\n'))
+// ── database setup ────────────────────────────────────────────────────────────
 
-  // Reload env so runSetup() can read it
-  config({ path: ENV_PATH, override: true })
-
-  // Run database setup with ora spinners
+async function runDbSetup() {
   const spinner = ora({ color: 'cyan' }).start('Connecting to database…')
   try {
     await runSetup({
@@ -131,7 +170,7 @@ async function setupFlow() {
     console.log(accent('  ✓ NanoMind database ready.\n'))
   } catch (err) {
     spinner.fail(chalk.red(err instanceof Error ? err.message : String(err)))
-    console.log(chalk.dim('\n  Fix the error above, then run `npx nanomind` again.\n'))
+    console.log(chalk.dim('\n  Fix the error above, then run `npx nanomind-ai` again.\n'))
     process.exit(1)
   }
 }
@@ -158,26 +197,23 @@ async function verifyConnection(): Promise<boolean> {
 
 // ── dev server ────────────────────────────────────────────────────────────────
 
-async function launchServer() {
-  const spinner = ora('Starting NanoMind…').start()
-
-  const app = next({ dev: true, dir: process.cwd(), port: PORT })
-  const handle = app.getRequestHandler()
-
-  await app.prepare()
-
-  const server = createServer((req, res) => {
-    handle(req, res)
-  })
-
-  await new Promise<void>((resolve) => {
-    server.listen(PORT, () => resolve())
-  })
-
-  spinner.succeed(accent(`NanoMind running at http://localhost:${PORT}`))
+function launchServer() {
+  console.log(accent(`  Starting NanoMind at http://localhost:${PORT}`))
   console.log(chalk.dim('  Press Ctrl+C to stop.\n'))
 
-  await open(`http://localhost:${PORT}`)
+  const child = spawn('npm', ['run', 'dev'], {
+    stdio: 'inherit',
+    shell: true,
+    cwd: CWD,
+  })
+
+  setTimeout(() => {
+    open(`http://localhost:${PORT}`)
+  }, 3000)
+
+  child.on('exit', (code) => {
+    process.exit(code ?? 0)
+  })
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -185,9 +221,30 @@ async function launchServer() {
 async function main() {
   printHeader()
 
-  if (!isConfigured()) {
-    await setupFlow()
+  if (!isNanoMindProject()) {
+    // Fresh install — user ran npx nanomind-ai from an empty directory
+    console.log(chalk.white('  First time setup detected. Let\'s get you configured.\n'))
+
+    scaffoldProject()
+    console.log()
+
+    const answers = await promptForKeys()
+    console.log()
+    writeEnv(answers)
+    console.log(accent('  ✓ .env.local written\n'))
+
+    installDependencies()
+    console.log()
+
+    // Reload env so runSetup can read it
+    config({ path: ENV_PATH, override: true })
+    await runDbSetup()
   } else {
+    // Existing project
+    if (isConfigured()) {
+      console.log(accent('  ✓ Environment found\n'))
+    }
+
     config({ path: ENV_PATH })
 
     const ok = await verifyConnection()
@@ -199,7 +256,8 @@ async function main() {
       } as never)
 
       if (rerun) {
-        await setupFlow()
+        config({ path: ENV_PATH, override: true })
+        await runDbSetup()
       } else {
         console.log(chalk.dim('\n  Exiting. Fix your connection and try again.\n'))
         process.exit(1)
@@ -207,7 +265,7 @@ async function main() {
     }
   }
 
-  await launchServer()
+  launchServer()
 }
 
 main().catch((err) => {
