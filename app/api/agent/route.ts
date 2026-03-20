@@ -60,20 +60,25 @@ export async function POST(request: Request) {
       chat_history: chatHistory,
     })
 
-    console.log('[agent] result type:', typeof result, 'keys:', Object.keys(result))
-    console.log('[agent] result.output:', result.output)
+    // result.output may be a plain string or an array of Anthropic content blocks
+    // e.g. [{ type: 'text', text: '...' }, ...]
+    function extractText(output: unknown): string {
+      if (typeof output === 'string') return output
+      if (Array.isArray(output)) {
+        return output
+          .filter((b) => b && (b as Record<string, unknown>).type === 'text')
+          .map((b) => String((b as Record<string, unknown>).text ?? ''))
+          .join('')
+      }
+      if (output != null && typeof output === 'object') {
+        const o = output as Record<string, unknown>
+        if (typeof o.text === 'string') return o.text
+        if (typeof o.content === 'string') return o.content
+      }
+      return ''
+    }
 
-    // Defensively extract output string — coerce any truthy value
-    let answer: string =
-      typeof result === 'string'
-        ? result
-        : result.output != null
-        ? String(result.output)
-        : result.text != null
-        ? String(result.text)
-        : ''
-
-    console.log('[agent] answer:', answer)
+    let answer = extractText(typeof result === 'string' ? result : result.output ?? result.text ?? '')
 
     // Extract __CLARIFY__ prefix if the LLM emitted one
     let clarifyOptions: ClarifyOption[] | undefined
