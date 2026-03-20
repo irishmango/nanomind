@@ -3,59 +3,45 @@ import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
 import { resolve } from 'path'
 
-config({ path: resolve(process.cwd(), '.env.local') })
+// ── exported setup function ───────────────────────────────────────────────────
+// Reads from process.env — caller is responsible for loading .env.local first.
 
-// ── env ───────────────────────────────────────────────────────────────────────
+export async function runSetup(opts: {
+  onStep: (msg: string) => void
+}): Promise<void> {
+  const { onStep } = opts
 
-const DATABASE_URL = process.env.DATABASE_URL
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const DATABASE_URL = process.env.DATABASE_URL
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-if (!DATABASE_URL) {
-  console.error('✗ DATABASE_URL is missing from .env.local')
-  console.error('  Find it in: Supabase dashboard → Settings → Database → Connection string (URI mode)')
-  process.exit(1)
-}
-if (!SUPABASE_URL || !SERVICE_KEY) {
-  console.error('✗ NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing from .env.local')
-  process.exit(1)
-}
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-function ok(msg: string) {
-  console.log(`  ✓ ${msg}`)
-}
-
-function fail(msg: string, err: unknown) {
-  const detail = err instanceof Error ? err.message : String(err)
-  console.error(`  ✗ ${msg}`)
-  console.error(`    ${detail}`)
-  process.exit(1)
-}
-
-async function run(client: Client, label: string, sql: string) {
-  try {
-    await client.query(sql)
-    ok(label)
-  } catch (err) {
-    fail(label, err)
+  if (!DATABASE_URL) {
+    throw new Error(
+      'DATABASE_URL is missing.\n  Find it in: Supabase → Settings → Database → Connection string (URI mode)',
+    )
   }
-}
-
-// ── schema steps ──────────────────────────────────────────────────────────────
-
-async function main() {
-  console.log('\nNanoMind — database setup\n')
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.')
+  }
 
   const pg = new Client({ connectionString: DATABASE_URL })
   await pg.connect()
 
+  async function run(label: string, sql: string) {
+    try {
+      await pg.query(sql)
+      onStep(label)
+    } catch (err) {
+      await pg.end().catch(() => {})
+      throw new Error(`${label}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   // 1. pgvector
-  await run(pg, 'pgvector enabled', `create extension if not exists vector;`)
+  await run('pgvector enabled', `create extension if not exists vector;`)
 
   // 2. tables
-  await run(pg, 'table: materials created', `
+  await run('table: materials', `
     create table if not exists materials (
       id          uuid primary key default gen_random_uuid(),
       name        text not null,
@@ -66,7 +52,7 @@ async function main() {
     );
   `)
 
-  await run(pg, 'table: sessions created', `
+  await run('table: sessions', `
     create table if not exists sessions (
       id          uuid primary key default gen_random_uuid(),
       material_id uuid references materials(id) on delete set null,
@@ -75,7 +61,7 @@ async function main() {
     );
   `)
 
-  await run(pg, 'table: messages created', `
+  await run('table: messages', `
     create table if not exists messages (
       id         uuid primary key default gen_random_uuid(),
       session_id uuid references sessions(id) on delete cascade not null,
@@ -85,7 +71,7 @@ async function main() {
     );
   `)
 
-  await run(pg, 'table: documents created', `
+  await run('table: documents', `
     create table if not exists documents (
       id          uuid primary key default gen_random_uuid(),
       material_id uuid references materials(id) on delete cascade,
@@ -99,7 +85,7 @@ async function main() {
     );
   `)
 
-  await run(pg, 'table: notebook_entries created', `
+  await run('table: notebook_entries', `
     create table if not exists notebook_entries (
       id          uuid primary key default gen_random_uuid(),
       session_id  uuid references sessions(id) on delete cascade,
@@ -113,7 +99,7 @@ async function main() {
   `)
 
   // 3. match_documents function
-  await run(pg, 'function: match_documents created', `
+  await run('function: match_documents', `
     create or replace function match_documents(
       query_embedding  vector(768),
       match_threshold  float,
@@ -137,7 +123,7 @@ async function main() {
   `)
 
   // 4. grants
-  await run(pg, 'grants applied', `
+  await run('grants applied', `
     grant select, insert, update, delete
       on all tables in schema public
       to anon, authenticated;
@@ -146,12 +132,12 @@ async function main() {
 
   // 5. RLS
   for (const table of ['materials', 'sessions', 'messages', 'documents', 'notebook_entries']) {
-    await run(pg, `RLS enabled: ${table}`, `alter table ${table} enable row level security;`)
+    await run(`RLS enabled: ${table}`, `alter table ${table} enable row level security;`)
   }
 
-  // 6. policies (IF NOT EXISTS supported in Postgres 15+; use DO block for safety)
+  // 6. policies
   for (const table of ['materials', 'sessions', 'messages', 'documents', 'notebook_entries']) {
-    await run(pg, `policy: ${table}`, `
+    await run(`policy: ${table}`, `
       do $$
       begin
         if not exists (
@@ -168,9 +154,8 @@ async function main() {
 
   await pg.end()
 
-  // 7. seed data — via service role client so RLS is bypassed cleanly
-  console.log()
-  const supabase = createClient(SUPABASE_URL!, SERVICE_KEY!)
+  // 7. seed data via service role client
+  const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 
   const seeds = [
     {
@@ -201,17 +186,31 @@ async function main() {
       .maybeSingle()
 
     if (existing) {
-      ok(`seed skipped (already exists): ${seed.name}`)
+      onStep(`seed skipped (exists): ${seed.name}`)
     } else {
       const { error } = await supabase.from('materials').insert(seed)
-      if (error) fail(`seed: ${seed.name}`, error.message)
-      else ok(`seed inserted: ${seed.name}`)
+      if (error) throw new Error(`Seed "${seed.name}": ${error.message}`)
+      onStep(`seed inserted: ${seed.name}`)
     }
   }
-
-  console.log()
-  console.log('  ✓ NanoMind database ready.')
-  console.log()
 }
 
-main()
+// ── standalone entry point (`npm run setup`) ──────────────────────────────────
+
+const isMain = Boolean(
+  process.argv[1] && (
+    process.argv[1].endsWith('setup-db.ts') ||
+    process.argv[1].endsWith('setup-db.js')
+  ),
+)
+
+if (isMain) {
+  config({ path: resolve(process.cwd(), '.env.local') })
+  console.log('\nNanoMind — database setup\n')
+  runSetup({ onStep: (msg) => console.log(`  ✓ ${msg}`) })
+    .then(() => { console.log('\n  ✓ NanoMind database ready.\n') })
+    .catch((err) => {
+      console.error(`\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
+      process.exit(1)
+    })
+}
