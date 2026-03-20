@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useChat, type ToolCall } from '@/context/ChatContext'
+import { useChat, type ToolCall, type ClarifyOption } from '@/context/ChatContext'
 
 function TypingIndicator() {
   return (
@@ -60,26 +60,55 @@ function ToolCallStep({ toolCalls }: { toolCalls: ToolCall[] }) {
   )
 }
 
-function SourceBadge({ source }: { source: string }) {
-  const isMP = source.startsWith('via Materials Project')
-  const isRAG = source.startsWith('via ')
+function ClarifyButtons({ options, onSelect }: { options: ClarifyOption[]; onSelect: (label: string) => void }) {
   return (
-    <div className="mt-2 pt-2 border-t border-white/[0.05]">
-      <span className={`inline-flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded
-        ${isMP
-          ? 'text-purple-400/60 bg-purple-400/[0.06] border border-purple-400/15'
-          : isRAG
-          ? 'text-[#00D4AA]/50 bg-[#00D4AA]/[0.06] border border-[#00D4AA]/15'
-          : 'text-white/20 bg-white/[0.03] border border-white/[0.06]'
-        }`}>
-        {isMP ? '◆' : isRAG ? '◈' : '◇'} {source}
-      </span>
+    <div className="mt-3 flex flex-wrap gap-2">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onSelect(opt.label)}
+          className="px-3 py-1.5 rounded-lg font-mono text-[11px] border
+            text-purple-300/80 border-purple-400/30 bg-purple-400/[0.06]
+            hover:bg-purple-400/[0.12] hover:border-purple-400/50 hover:text-purple-200
+            transition-colors"
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function SourcePill({ label }: { label: string }) {
+  const isMP = label === 'Materials Project'
+  const isFile = /\.(pdf|txt|md)$/i.test(label)
+  return (
+    <span className={`inline-flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded
+      ${isMP
+        ? 'text-amber-400/70 bg-amber-400/[0.08] border border-amber-400/20'
+        : isFile
+        ? 'text-[#00D4AA]/50 bg-[#00D4AA]/[0.06] border border-[#00D4AA]/15'
+        : 'text-white/20 bg-white/[0.03] border border-white/[0.06]'
+      }`}>
+      {isMP ? '◆' : isFile ? '◈' : '◇'} {isFile ? `via ${label}` : label}
+    </span>
+  )
+}
+
+function SourceBadge({ source, sources }: { source?: string; sources?: string[] }) {
+  const items = sources ?? (source ? [source] : [])
+  if (items.length === 0) return null
+  // Normalise legacy "via Materials Project" strings from non-agent mode
+  const normalised = items.map((s) => s.replace(/^via /, ''))
+  return (
+    <div className="mt-2 pt-2 border-t border-white/[0.05] flex flex-wrap gap-1.5">
+      {normalised.map((s) => <SourcePill key={s} label={s} />)}
     </div>
   )
 }
 
 export default function MessageList() {
-  const { messages, isLoading, retryLast } = useChat()
+  const { messages, isLoading, retryLast, sendMessage } = useChat()
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -162,8 +191,14 @@ export default function MessageList() {
                       ↺ Retry
                     </button>
                   )}
-                  {!msg.streaming && msg.source && (
-                    <SourceBadge source={msg.source} />
+                  {!msg.streaming && msg.clarifyOptions && msg.clarifyOptions.length > 0 && (
+                    <ClarifyButtons
+                      options={msg.clarifyOptions}
+                      onSelect={(label) => sendMessage(label)}
+                    />
+                  )}
+                  {!msg.streaming && (msg.source || msg.sources) && (
+                    <SourceBadge source={msg.source} sources={msg.sources} />
                   )}
                 </div>
               )}

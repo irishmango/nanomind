@@ -1,11 +1,12 @@
 import { createNanoAgent } from '@/lib/agent'
 import { createClient } from '@/lib/supabase/server'
+import { retrieveContext } from '@/lib/retriever'
 import { HumanMessage, AIMessage } from '@langchain/core/messages'
 import type { AgentStep } from 'langchain/agents'
+import type { ClarifyOption } from '@/context/ChatContext'
 
 export async function POST(request: Request) {
-  const { session_id, message, material_ids } = await request.json()
-  const material_id = Array.isArray(material_ids) ? (material_ids[0] ?? null) : null
+  const { session_id, message } = await request.json()
 
   if (!session_id || !message) {
     return Response.json({ error: 'session_id and message are required' }, { status: 400 })
@@ -38,58 +39,87 @@ export async function POST(request: Request) {
       role === 'user' ? new HumanMessage(content) : new AIMessage(content),
     )
 
-  const encoder = new TextEncoder()
-  let assistantContent = ''
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      function send(text: string) {
-        assistantContent += text
-        controller.enqueue(encoder.encode(text))
+  try {
+    // Retrieve RAG context first so the agent sees uploaded documents
+    // before deciding whether to call a tool
+    let augmentedInput = message
+    let ragFilenames: string[] = []
+    try {
+      const ragContext = await retrieveContext(message, '', session_id)
+      if (ragContext) {
+        augmentedInput = `DOCUMENT CONTEXT:\n${ragContext}\n\nQUESTION: ${message}`
+        // Extract filenames from chunk headers "Chunk N — filename.pdf"
+        const matches = ragContext.matchAll(/— ([\w\-. ]+\.(pdf|txt|md))/gi)
+        ragFilenames = [...new Set([...matches].map((m) => m[1]))]
       }
+    } catch { /* non-fatal — proceed without RAG context */ }
 
-      try {
-        const executor = createNanoAgent()
-        const result = await executor.invoke({
-          input: message,
-          chat_history: chatHistory,
-          material_id: material_id ?? null,
-        })
+    const executor = createNanoAgent()
+    const result = await executor.invoke({
+      input: augmentedInput,
+      chat_history: chatHistory,
+    })
 
-        // Emit structured tool metadata as a parseable prefix (not accumulated into assistantContent)
-        const steps: AgentStep[] = result.intermediateSteps ?? []
-        if (steps.length > 0) {
-          const toolMeta = steps.map((step) => {
-            const inputObj = step.action.toolInput as Record<string, unknown>
-            const input = String(Object.values(inputObj)[0] ?? '')
-            const result = typeof step.observation === 'string'
-              ? step.observation.slice(0, 150)
-              : String(step.observation)
-            return { tool: step.action.tool, input, result }
-          })
-          controller.enqueue(encoder.encode(`__TOOL__${JSON.stringify(toolMeta)}\n`))
-        }
+    console.log('[agent] result type:', typeof result, 'keys:', Object.keys(result))
+    console.log('[agent] result.output:', result.output)
 
-        send(result.output)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown error'
-        send(`[agent error: ${msg}]`)
+    // Defensively extract output string — coerce any truthy value
+    let answer: string =
+      typeof result === 'string'
+        ? result
+        : result.output != null
+        ? String(result.output)
+        : result.text != null
+        ? String(result.text)
+        : ''
+
+    console.log('[agent] answer:', answer)
+
+    // Extract __CLARIFY__ prefix if the LLM emitted one
+    let clarifyOptions: ClarifyOption[] | undefined
+    if (answer.startsWith('__CLARIFY__')) {
+      const newlineIdx = answer.indexOf('\n')
+      if (newlineIdx !== -1) {
+        try {
+          clarifyOptions = JSON.parse(answer.slice('__CLARIFY__'.length, newlineIdx)) as ClarifyOption[]
+          answer = answer.slice(newlineIdx + 1)
+        } catch { /* malformed — leave answer as-is */ }
       }
+    }
 
-      // Persist assistant response
-      try {
-        await supabase.from('messages').insert({
-          session_id,
-          role: 'assistant',
-          content: assistantContent,
-        })
-      } catch { /* non-fatal */ }
+    // Build tool calls metadata
+    const steps: AgentStep[] = result.intermediateSteps ?? []
+    const toolCalls = steps.map((step) => {
+      const inputObj = step.action.toolInput as Record<string, unknown>
+      const input = String(Object.values(inputObj)[0] ?? '')
+      const obs = typeof step.observation === 'string'
+        ? step.observation.slice(0, 150)
+        : String(step.observation)
+      return { tool: step.action.tool, input, result: obs }
+    })
 
-      controller.close()
-    },
-  })
+    // Determine sources
+    const sources: string[] = []
+    const usedMP = steps.some(
+      (s) => s.action.tool === 'get_structure' || s.action.tool === 'get_properties',
+    )
+    if (usedMP) sources.push('Materials Project')
+    if (ragFilenames.length > 0) sources.push(...ragFilenames)
+    if (sources.length === 0) sources.push('AI knowledge')
 
-  return new Response(stream, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-  })
+    // Persist assistant response
+    try {
+      await supabase.from('messages').insert({
+        session_id,
+        role: 'assistant',
+        content: answer,
+      })
+    } catch { /* non-fatal */ }
+
+    return Response.json({ answer, sources, toolCalls, clarifyOptions })
+  } catch (err) {
+    console.error('[agent] invoke error:', err)
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    return Response.json({ answer: `[agent error: ${msg}]`, sources: [], toolCalls: [] })
+  }
 }

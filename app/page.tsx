@@ -23,6 +23,7 @@ export default function Home() {
   const { messages, agentMode, setAgentMode, sessionId } = useChat()
   const [tab, setTab] = useState<Tab>('chat')
 
+  // Reset to chat tab whenever a new session starts
   useEffect(() => {
     setTab('chat')
   }, [sessionId])
@@ -74,29 +75,39 @@ export default function Home() {
         )}
       </header>
 
-      {/* Chat panel */}
-      <div className={`flex flex-col flex-1 min-h-0 ${tab === 'chat' ? '' : 'hidden'}`}>
-        {messages.length === 0 ? <WelcomeScreen /> : <MessageList />}
-        <InputBar />
-      </div>
-
-      {/* Spectra panel — kept mounted to preserve state */}
-      <div className={`flex-1 overflow-y-auto ${tab === 'spectra' ? '' : 'hidden'}`}>
-        <SpectraPanel fullWidth />
-      </div>
-
-      {/* Notebook tab */}
-      {tab === 'notebook' && (
-        <div className="flex flex-col flex-1 min-h-0">
-          <NotebookTab sessionId={sessionId} />
+      {/* Content area */}
+      {!sessionId ? (
+        /* No session — welcome screen fills the space */
+        <div className="flex-1 min-h-0">
+          <WelcomeScreen />
         </div>
-      )}
+      ) : (
+        <>
+          {/* Chat panel */}
+          <div className={`flex flex-col flex-1 min-h-0 ${tab === 'chat' ? '' : 'hidden'}`}>
+            <MessageList />
+            <InputBar />
+          </div>
 
-      {/* Documents tab */}
-      {tab === 'documents' && (
-        <div className="flex flex-col flex-1 min-h-0">
-          <DocumentsTab sessionId={sessionId} />
-        </div>
+          {/* Spectra panel — kept mounted to preserve drop state */}
+          <div className={`flex-1 overflow-y-auto ${tab === 'spectra' ? '' : 'hidden'}`}>
+            <SpectraPanel fullWidth />
+          </div>
+
+          {/* Notebook tab */}
+          {tab === 'notebook' && (
+            <div className="flex flex-col flex-1 min-h-0">
+              <NotebookTab sessionId={sessionId} />
+            </div>
+          )}
+
+          {/* Documents tab */}
+          {tab === 'documents' && (
+            <div className="flex flex-col flex-1 min-h-0">
+              <DocumentsTab sessionId={sessionId} />
+            </div>
+          )}
+        </>
       )}
     </div>
   )

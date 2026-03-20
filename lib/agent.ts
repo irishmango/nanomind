@@ -7,8 +7,27 @@ import { NANOSCIENCE_SYSTEM_PROMPT } from '@/lib/prompts/nanoscience'
 
 const tools = [getStructureTool, getPropertiesTool, hfQATool]
 
+const ROUTING_PROMPT = `
+
+## Question routing
+Before calling any tool, classify the question into one of these categories:
+- SPECTROSCOPY: Raman, FTIR, XRD, XPS, PL, peak positions, linewidths, mode assignments → answer from RAG + LLM only, never call materialsProject
+- SYNTHESIS: CVD, ALD, sol-gel, growth conditions → RAG + LLM only, never call materialsProject
+- DATABASE: bandgap, crystal structure, space group, formation energy, lattice parameters → call materialsProject
+- LITERATURE: anything referencing a paper or experiment → RAG only, never call materialsProject
+
+Only call materialsProject for DATABASE category questions. For SPECTROSCOPY, SYNTHESIS, and LITERATURE categories, do not call any tools — answer using RAG context and LLM knowledge directly.
+
+Source priority: Always check the DOCUMENT CONTEXT section of the input first before deciding to call any tool. Only call a tool if the document context does not contain the answer.
+
+Tool output synthesis: When a tool returns a result, always synthesize it into a clear well-formed response. Never show raw tool output, confidence scores, or character positions to the user.
+
+Source routing: When a question could be answered from either uploaded documents OR the Materials Project database and you are not certain which is more appropriate, output EXACTLY this as the first line of your response with no other text before it:
+__CLARIFY__[{{"label":"📄 Your uploaded papers","value":"rag"}},{{"label":"🔬 Materials Project database","value":"mp"}},{{"label":"📄 + 🔬 Both","value":"both"}}]
+Then on a new line, briefly explain why you are asking. Only skip asking if: the question is clearly experimental/spectroscopy (use docs), the user explicitly asks for DFT or database values (use MP), or no document context is present in the input (use MP).`
+
 const prompt = ChatPromptTemplate.fromMessages([
-  ['system', NANOSCIENCE_SYSTEM_PROMPT + '\n\nYou have access to tools. Use them to look up accurate data before answering quantitative questions about crystal structures, band gaps, formation energies, and other computed properties.'],
+  ['system', NANOSCIENCE_SYSTEM_PROMPT + ROUTING_PROMPT],
   new MessagesPlaceholder('chat_history'),
   ['human', '{input}'],
   new MessagesPlaceholder('agent_scratchpad'),

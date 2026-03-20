@@ -12,9 +12,10 @@ function getClient() {
 export const hfQATool = new DynamicStructuredTool({
   name: 'extract_answer_from_passage',
   description:
-    'Use a materials-science NLP model to extract a precise answer span from a provided passage. ' +
-    'Useful when you have a specific text excerpt and need to extract a factual answer about ' +
-    'material properties, synthesis conditions, or experimental results.',
+    'Use ONLY when the user provides a specific text passage and asks you to extract a specific ' +
+    'answer span from it. Do NOT use for general knowledge questions, Raman spectroscopy questions, ' +
+    'or anything answerable from the document context already provided in the input. ' +
+    'This tool is for targeted NLP extraction only.',
   schema: z.object({
     passage: z
       .string()
@@ -35,9 +36,9 @@ export const hfQATool = new DynamicStructuredTool({
       })
       const score = typeof result.score === 'number' ? result.score : 0
       if (score < 0.05) {
-        return `No confident answer found in the passage for: "${question}" (confidence: ${(score * 100).toFixed(1)}%)`
+        return `No answer found in the passage for: "${question}"`
       }
-      return `Answer: "${result.answer}" (confidence: ${(score * 100).toFixed(1)}%, position: chars ${result.start}–${result.end})`
+      return result.answer
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       return `HuggingFace inference error: ${msg}`

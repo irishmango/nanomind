@@ -18,6 +18,11 @@ export type ToolCall = {
   result: string
 }
 
+export type ClarifyOption = {
+  label: string
+  value: string
+}
+
 export type Message = {
   id: string
   role: 'user' | 'assistant'
@@ -25,7 +30,9 @@ export type Message = {
   streaming?: boolean
   isAgent?: boolean
   toolCalls?: ToolCall[]
-  source?: string
+  clarifyOptions?: ClarifyOption[]
+  source?: string   // non-agent: single derived source string
+  sources?: string[] // agent: array of explicit sources
 }
 
 type ChatContextValue = {
@@ -91,84 +98,74 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       ])
 
       try {
-        const endpoint = agentMode ? '/api/agent' : '/api/chat'
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sid,
-            message: text,
-            material_ids: activeMaterials.map((m) => m.id),
-          }),
+        const body = JSON.stringify({
+          session_id: sid,
+          message: text,
+          material_ids: activeMaterials.map((m) => m.id),
         })
 
-        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+        if (agentMode) {
+          // Agent mode: single JSON response (LangChain runs tools server-side)
+          const res = await fetch('/api/agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+          })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json() as {
+            answer: string
+            sources: string[]
+            toolCalls: ToolCall[]
+            clarifyOptions?: ClarifyOption[]
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: data.answer ?? '',
+                    streaming: false,
+                    toolCalls: data.toolCalls?.length ? data.toolCalls : undefined,
+                    clarifyOptions: data.clarifyOptions,
+                    sources: data.sources,
+                  }
+                : m,
+            ),
+          )
+        } else {
+          // Chat mode: streaming plain-text response
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+          })
+          if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let streamedContent = ''
 
-        // For agent mode: buffer the start of the stream to extract __TOOL__ prefix
-        let toolCallsExtracted = !agentMode
-        let prefixBuffer = ''
-        let extractedToolCalls: ToolCall[] | undefined
-        let streamedContent = ''
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          const chunk = decoder.decode(value, { stream: true })
-
-          if (!toolCallsExtracted) {
-            prefixBuffer += chunk
-            const newlineIdx = prefixBuffer.indexOf('\n')
-            if (newlineIdx !== -1) {
-              const firstLine = prefixBuffer.slice(0, newlineIdx)
-              const rest = prefixBuffer.slice(newlineIdx + 1)
-              if (firstLine.startsWith('__TOOL__')) {
-                try {
-                  extractedToolCalls = JSON.parse(firstLine.slice('__TOOL__'.length)) as ToolCall[]
-                } catch { /* ignore malformed */ }
-              }
-              streamedContent = rest
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId
-                    ? { ...m, toolCalls: extractedToolCalls, content: rest }
-                    : m,
-                ),
-              )
-              toolCallsExtracted = true
-              prefixBuffer = ''
-            }
-            // otherwise keep buffering
-          } else {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            const chunk = decoder.decode(value, { stream: true })
             streamedContent += chunk
             setMessages((prev) =>
               prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m)),
             )
           }
-        }
 
-        // Flush buffer if __TOOL__ line never resolved (very short / no-newline response)
-        if (!toolCallsExtracted && prefixBuffer) {
-          streamedContent = prefixBuffer
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantId ? { ...m, content: prefixBuffer } : m)),
-          )
-        }
-
-        // Derive source badge
-        let source = 'AI knowledge'
-        if (extractedToolCalls && extractedToolCalls.length > 0) {
-          source = 'via Materials Project'
-        } else {
+          // Derive source badge from streamed content
+          let source = 'AI knowledge'
           const fileMatch = streamedContent.match(/\b([\w\-.]+\.(pdf|txt|md))\b/i)
           if (fileMatch) source = `via ${fileMatch[1]}`
-        }
 
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, streaming: false, source } : m)),
-        )
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, streaming: false, source } : m,
+            ),
+          )
+        }
       } catch (err) {
         const errText = err instanceof Error ? err.message : 'Unknown error'
         setMessages((prev) =>
