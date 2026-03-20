@@ -54,11 +54,17 @@ export async function runSetup(opts: {
 
   await run('table: sessions', `
     create table if not exists sessions (
-      id          uuid primary key default gen_random_uuid(),
-      material_id uuid references materials(id) on delete set null,
-      title       text,
-      created_at  timestamptz default now()
+      id           uuid primary key default gen_random_uuid(),
+      material_ids uuid[] default '{}',
+      title        text,
+      created_at   timestamptz default now()
     );
+  `)
+
+  // Migrate existing tables: drop old FK column, add array column (both idempotent)
+  await run('migrate: sessions.material_ids', `
+    alter table sessions add column if not exists material_ids uuid[] default '{}';
+    alter table sessions drop column if exists material_id;
   `)
 
   await run('table: messages', `

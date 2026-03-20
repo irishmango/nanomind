@@ -26,7 +26,14 @@ const STARTER_CARDS = [
 ]
 
 export default function WelcomeScreen() {
-  const { sendMessage, activeMaterial } = useChat()
+  const { sendMessage, activeMaterials } = useChat()
+
+  const headline =
+    activeMaterials.length === 1
+      ? `Research co-pilot for ${activeMaterials[0].name}`
+      : activeMaterials.length > 1
+        ? `Research co-pilot for ${activeMaterials.map((m) => m.formula ?? m.name).join(', ')}`
+        : 'Your nanoscience research co-pilot'
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 select-none">
@@ -36,9 +43,7 @@ export default function WelcomeScreen() {
           NanoMind
         </p>
         <h1 className="font-sans text-2xl font-semibold text-white/80 leading-tight">
-          {activeMaterial
-            ? `Research co-pilot for ${activeMaterial.name}`
-            : 'Your nanoscience research co-pilot'}
+          {headline}
         </h1>
         <p className="mt-2 font-mono text-xs text-white/25 max-w-sm">
           Ask about synthesis, characterisation, properties, or experimental design.

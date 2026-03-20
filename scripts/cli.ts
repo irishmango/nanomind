@@ -1,3 +1,5 @@
+#!/usr/bin/env tsx
+
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { createServer } from 'http'
 import { resolve } from 'path'
@@ -69,8 +71,7 @@ async function setupFlow() {
     {
       type: 'input',
       name: 'supabaseUrl',
-      message: 'Supabase project URL',
-      hint: 'https://xxxx.supabase.co',
+      message: 'Supabase project URL (https://xxxx.supabase.co)',
       validate: (v: string) => v.startsWith('https://') || 'Must start with https://',
     },
     {
@@ -88,15 +89,13 @@ async function setupFlow() {
     {
       type: 'password',
       name: 'anthropicKey',
-      message: 'Anthropic API key',
-      hint: 'sk-ant-...',
+      message: 'Anthropic API key (sk-ant-...)',
       validate: (v: string) => v.length > 10 || 'Required',
     },
     {
       type: 'input',
       name: 'databaseUrl',
-      message: 'Database URL (Postgres connection string)',
-      hint: 'Supabase → Settings → Database → URI',
+      message: 'Database URL — Supabase → Settings → Database → URI',
       validate: (v: string) => v.startsWith('postgresql://') || 'Must start with postgresql://',
     },
     {

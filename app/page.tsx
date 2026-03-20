@@ -8,6 +8,7 @@ import WelcomeScreen from '@/components/WelcomeScreen'
 import SpectraPanel from '@/components/SpectraPanel'
 import NotebookTab from '@/components/tabs/NotebookTab'
 import DocumentsTab from '@/components/tabs/DocumentsTab'
+import MaterialSelector from '@/components/MaterialSelector'
 
 type Tab = 'chat' | 'spectra' | 'notebook' | 'documents'
 
@@ -19,10 +20,9 @@ const TAB_LABELS: Record<Tab, string> = {
 }
 
 export default function Home() {
-  const { messages, activeMaterial, agentMode, setAgentMode, sessionId } = useChat()
+  const { messages, agentMode, setAgentMode, sessionId } = useChat()
   const [tab, setTab] = useState<Tab>('chat')
 
-  // Reset to chat whenever session changes
   useEffect(() => {
     setTab('chat')
   }, [sessionId])
@@ -30,25 +30,10 @@ export default function Home() {
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <header className="shrink-0 flex items-center gap-3 px-5 py-3 border-b border-white/[0.06]">
+      <header className="shrink-0 flex items-center gap-3 px-5 py-3 border-b border-white/[0.06] min-h-[52px]">
+        {/* Material selector — left side */}
         <div className="flex-1 min-w-0">
-          {activeMaterial ? (
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] text-white/30 uppercase tracking-widest">
-                Material
-              </span>
-              <span className="font-mono text-xs text-[#00D4AA] truncate">
-                {activeMaterial.formula ?? activeMaterial.name}
-              </span>
-              <span className="font-sans text-xs text-white/40 truncate hidden sm:block">
-                — {activeMaterial.name}
-              </span>
-            </div>
-          ) : (
-            <span className="font-mono text-xs text-white/20">
-              No material selected — select one from the sidebar
-            </span>
-          )}
+          <MaterialSelector />
         </div>
 
         {/* Live data toggle */}

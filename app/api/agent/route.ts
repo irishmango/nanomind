@@ -4,7 +4,8 @@ import { HumanMessage, AIMessage } from '@langchain/core/messages'
 import type { AgentStep } from 'langchain/agents'
 
 export async function POST(request: Request) {
-  const { session_id, message, material_id } = await request.json()
+  const { session_id, message, material_ids } = await request.json()
+  const material_id = Array.isArray(material_ids) ? (material_ids[0] ?? null) : null
 
   if (!session_id || !message) {
     return Response.json({ error: 'session_id and message are required' }, { status: 400 })

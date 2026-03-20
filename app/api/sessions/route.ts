@@ -5,7 +5,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('sessions')
-    .select('id, title, created_at, materials(name)')
+    .select('id, title, created_at, material_ids')
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -18,11 +18,11 @@ export async function GET() {
 export async function POST(request: Request) {
   const supabase = await createClient()
   const body = await request.json()
-  const { title, material_id } = body
+  const { title, material_ids } = body
 
   const { data, error } = await supabase
     .from('sessions')
-    .insert({ title, material_id })
+    .insert({ title, material_ids: material_ids ?? [] })
     .select('id')
     .single()
 

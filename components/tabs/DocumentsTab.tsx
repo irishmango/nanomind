@@ -23,7 +23,8 @@ function formatDate(iso: string) {
 }
 
 export default function DocumentsTab({ sessionId }: { sessionId: string | null }) {
-  const { activeMaterial } = useChat()
+  const { activeMaterials } = useChat()
+  const activeMaterial = activeMaterials[0] ?? null
   const [docs, setDocs] = useState<DocEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [deletingDoc, setDeletingDoc] = useState<string | null>(null)

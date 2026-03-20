@@ -29,8 +29,8 @@ export type Message = {
 }
 
 type ChatContextValue = {
-  activeMaterial: Material | null
-  setActiveMaterial: (m: Material | null) => void
+  activeMaterials: Material[]
+  setActiveMaterials: (m: Material[]) => void
   sessionId: string | null
   setSessionId: (id: string | null) => void
   messages: Message[]
@@ -47,7 +47,7 @@ type ChatContextValue = {
 const ChatContext = createContext<ChatContextValue | null>(null)
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const [activeMaterial, setActiveMaterial] = useState<Material | null>(null)
+  const [activeMaterials, setActiveMaterials] = useState<Material[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [agentMode, setAgentMode] = useState(false)
 
@@ -61,12 +61,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       // Ensure a session exists
       let sid = sessionId
       if (!sid) {
+        const title =
+          activeMaterials.length > 0
+            ? `${activeMaterials.map((m) => m.formula ?? m.name).join(', ')} session`
+            : 'New session'
         const res = await fetch('/api/sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: activeMaterial ? `${activeMaterial.name} session` : 'New session',
-            material_id: activeMaterial?.id ?? null,
+            title,
+            material_ids: activeMaterials.map((m) => m.id),
           }),
         })
         const data = await res.json()
@@ -94,7 +98,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({
             session_id: sid,
             message: text,
-            material_id: activeMaterial?.id ?? null,
+            material_ids: activeMaterials.map((m) => m.id),
           }),
         })
 
@@ -176,7 +180,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false)
       }
     },
-    [isLoading, sessionId, activeMaterial, agentMode, setSessionId, setMessages],
+    [isLoading, sessionId, activeMaterials, agentMode, setSessionId, setMessages],
   )
 
   const retryLast = useCallback(async () => {
@@ -192,8 +196,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   return (
     <ChatContext.Provider
       value={{
-        activeMaterial,
-        setActiveMaterial,
+        activeMaterials,
+        setActiveMaterials,
         sessionId,
         setSessionId,
         messages,

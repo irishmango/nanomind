@@ -16,7 +16,8 @@ const SPECTRA_TYPES: { value: SpectraType; label: string }[] = [
 type Props = { fullWidth?: boolean }
 
 export default function SpectraPanel({ fullWidth = false }: Props) {
-  const { activeMaterial } = useChat()
+  const { activeMaterials } = useChat()
+  const activeMaterial = activeMaterials[0] ?? null
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [spectraType, setSpectraType] = useState<SpectraType>('raman')

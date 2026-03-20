@@ -1,7 +1,38 @@
 {
   "name": "nanomind",
   "version": "0.1.0",
-  "private": true,
+  "description": "AI research co-pilot for nanoscience and materials chemistry",
+  "keywords": [
+    "nanoscience",
+    "materials-science",
+    "chemistry",
+    "ai",
+    "research",
+    "langchain",
+    "next.js",
+    "supabase",
+    "anthropic"
+  ],
+  "author": "Shokri Francis Raoof <shokrifrancis.r@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/irishmango/nanomind"
+  },
+  "homepage": "https://github.com/irishmango/nanomind",
+  "files": [
+    "app/",
+    "components/",
+    "context/",
+    "lib/",
+    "public/",
+    "scripts/",
+    "next.config.ts",
+    "tsconfig.json",
+    "tailwind.config.ts",
+    "postcss.config.mjs",
+    ".env.example"
+  ],
   "bin": {
     "nanomind": "./scripts/cli.ts"
   },
@@ -35,7 +66,8 @@
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -48,7 +80,6 @@
     "eslint-config-next": "16.2.0",
     "pg": "^8.20.0",
     "tailwindcss": "^4",
-    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

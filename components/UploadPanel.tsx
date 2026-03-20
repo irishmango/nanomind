@@ -10,7 +10,8 @@ type UploadState =
   | { status: 'error'; message: string }
 
 export default function UploadPanel() {
-  const { activeMaterial, sessionId } = useChat()
+  const { activeMaterials, sessionId } = useChat()
+  const activeMaterial = activeMaterials[0] ?? null
   const [state, setState] = useState<UploadState>({ status: 'idle' })
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)

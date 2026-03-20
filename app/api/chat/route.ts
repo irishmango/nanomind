@@ -24,7 +24,6 @@ async function extractAndLogFinding({
   anthropic: Anthropic
   supabase: SupabaseClient
 }) {
-  // Skip short or error responses
   if (assistantContent.length < 80 || assistantContent.startsWith('[error')) return
 
   const extraction = await anthropic.messages.create({
@@ -61,32 +60,33 @@ ${assistantContent.slice(0, 1500)}`,
   })
 }
 
-// When true: model must answer ONLY from retrieved context, no outside knowledge
 const STRICT_RAG = true
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(request: Request) {
-  const { session_id, message, material_id } = await request.json()
+  const { session_id, message, material_ids } = await request.json()
 
   if (!session_id || !message) {
     return Response.json({ error: 'session_id and message are required' }, { status: 400 })
   }
 
+  const ids: string[] = Array.isArray(material_ids) ? material_ids : []
+  const primaryMaterialId = ids[0] ?? null
+
   const supabase = await createClient()
 
-  // 1. Persist the user message
+  // 1. Persist user message
   const { error: insertError } = await supabase.from('messages').insert({
     session_id,
     role: 'user',
     content: message,
   })
-
   if (insertError) {
     return Response.json({ error: insertError.message }, { status: 500 })
   }
 
-  // 2. Fetch last 10 messages as conversation history
+  // 2. Fetch conversation history
   const { data: history, error: historyError } = await supabase
     .from('messages')
     .select('role, content')
@@ -100,35 +100,32 @@ export async function POST(request: Request) {
 
   const conversationHistory = (history ?? [])
     .reverse()
-    .map(({ role, content }) => ({
-      role: role as 'user' | 'assistant',
-      content,
-    }))
+    .map(({ role, content }) => ({ role: role as 'user' | 'assistant', content }))
 
-  // 3. Fetch material metadata
+  // 3. Fetch all selected materials and build combined context
   let materialContext = ''
-  if (material_id) {
-    const { data: material } = await supabase
+  if (ids.length > 0) {
+    const { data: materials } = await supabase
       .from('materials')
       .select('name, formula, description, tags')
-      .eq('id', material_id)
-      .single()
+      .in('id', ids)
 
-    if (material) {
-      materialContext =
-        `\n\nActive material context:\n` +
-        `Name: ${material.name}\n` +
-        `Formula: ${material.formula ?? 'N/A'}\n` +
-        `Description: ${material.description ?? 'N/A'}\n` +
-        `Tags: ${(material.tags ?? []).join(', ')}`
+    if (materials && materials.length > 0) {
+      materialContext = '\n\nActive material contexts:\n'
+      for (const m of materials) {
+        materialContext +=
+          `\n— ${m.name}${m.formula ? ` (${m.formula})` : ''}\n` +
+          `  Description: ${m.description ?? 'N/A'}\n` +
+          `  Tags: ${(m.tags ?? []).join(', ')}\n`
+      }
     }
   }
 
-  // 4. Retrieve RAG context
+  // 4. Retrieve RAG context (using primary material + session scope)
   let ragContext = ''
-  if (material_id) {
+  if (primaryMaterialId) {
     try {
-      ragContext = await retrieveContext(message, material_id, session_id)
+      ragContext = await retrieveContext(message, primaryMaterialId, session_id)
     } catch (e) {
       console.error('RAG retrieval error:', e)
     }
@@ -149,13 +146,13 @@ STRICT INSTRUCTIONS FOR USING THIS CONTEXT:
 - When you use information from the context, cite the chunk filename (e.g. "According to paper.pdf, …").
 - If the answer cannot be found in the context${STRICT_RAG ? '' : ' or your general knowledge'}, respond: "This information was not found in the uploaded document."
 ${STRICT_RAG ? '- You must ONLY use the retrieved context above to answer. Do not draw on outside knowledge for factual claims about this material or experiment.' : ''}`
-  } else if (STRICT_RAG && material_id) {
+  } else if (STRICT_RAG && primaryMaterialId) {
     systemPrompt += `
 
 No document context was retrieved for this query. Inform the user that no relevant sections were found in the uploaded document, and offer to answer from general knowledge if they wish.`
   }
 
-  // 6. Stream response from Anthropic
+  // 6. Stream response
   const encoder = new TextEncoder()
   let assistantContent = ''
 
@@ -171,28 +168,23 @@ No document context was retrieved for this query. Inform the user that no releva
         })
 
         for await (const event of anthropicStream) {
-          if (
-            event.type === 'content_block_delta' &&
-            event.delta.type === 'text_delta'
-          ) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
             const text = event.delta.text
             assistantContent += text
             controller.enqueue(encoder.encode(text))
           }
         }
 
-        // Persist the assistant message after stream completes
         await supabase.from('messages').insert({
           session_id,
           role: 'assistant',
           content: assistantContent,
         })
 
-        // Auto-log to notebook (fire-and-forget — non-blocking)
         extractAndLogFinding({
           assistantContent,
           sessionId: session_id,
-          materialId: material_id ?? null,
+          materialId: primaryMaterialId,
           anthropic,
           supabase,
         }).catch(() => { /* non-fatal */ })
