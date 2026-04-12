@@ -6,7 +6,7 @@ import type { AgentStep } from 'langchain/agents'
 import type { ClarifyOption } from '@/context/ChatContext'
 
 export async function POST(request: Request) {
-  const { session_id, message } = await request.json()
+  const { session_id, message, spectra_context } = await request.json()
 
   if (!session_id || !message) {
     return Response.json({ error: 'session_id and message are required' }, { status: 400 })
@@ -44,10 +44,21 @@ export async function POST(request: Request) {
     // before deciding whether to call a tool
     let augmentedInput = message
     let ragFilenames: string[] = []
+
+    // Prepend uploaded spectrum peaks if present
+    if (spectra_context?.peaks?.length) {
+      const TYPE_LABELS: Record<string, string> = { raman: 'Raman', ftir: 'FTIR', xrd: 'XRD (X-ray diffraction)' }
+      const label = TYPE_LABELS[spectra_context.spectraType] ?? spectra_context.spectraType
+      const peakList = (spectra_context.peaks as Array<{ x: number; y: number }>)
+        .map((p: { x: number; y: number }, i: number) => `${i + 1}. x = ${p.x.toFixed(1)}, normalised intensity = ${p.y.toFixed(3)}`)
+        .join('\n')
+      augmentedInput = `UPLOADED SPECTRUM — ${label}${spectra_context.filename ? ` (${spectra_context.filename})` : ''}:\n${peakList}\n\nQUESTION: ${message}`
+    }
+
     try {
       const ragContext = await retrieveContext(message, '', session_id)
       if (ragContext) {
-        augmentedInput = `DOCUMENT CONTEXT:\n${ragContext}\n\nQUESTION: ${message}`
+        augmentedInput = `DOCUMENT CONTEXT:\n${ragContext}\n\n${augmentedInput}`
         // Extract filenames from chunk headers "Chunk N — filename.pdf"
         const matches = ragContext.matchAll(/— ([\w\-. ]+\.(pdf|txt|md))/gi)
         ragFilenames = [...new Set([...matches].map((m) => m[1]))]

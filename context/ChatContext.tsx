@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import { useSession } from '@/hooks/useSession'
+import type { Peak, SpectraType } from '@/lib/parseSpectra'
 
 export type Material = {
   id: string
@@ -10,6 +11,12 @@ export type Material = {
   description: string | null
   tags: string[] | null
   created_at: string
+}
+
+export type SpectraContext = {
+  peaks: Peak[]
+  spectraType: SpectraType
+  filename: string | null
 }
 
 export type ToolCall = {
@@ -38,6 +45,8 @@ export type Message = {
 type ChatContextValue = {
   activeMaterials: Material[]
   setActiveMaterials: (m: Material[]) => void
+  spectraContext: SpectraContext | null
+  setSpectraContext: (ctx: SpectraContext | null) => void
   sessionId: string | null
   setSessionId: (id: string | null) => void
   messages: Message[]
@@ -56,6 +65,7 @@ const ChatContext = createContext<ChatContextValue | null>(null)
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [activeMaterials, setActiveMaterials] = useState<Material[]>([])
+  const [spectraContext, setSpectraContext] = useState<SpectraContext | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [agentMode, setAgentMode] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -113,6 +123,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           message: text,
           material_ids: activeMaterials.map((m) => m.id),
           materials: activeMaterials,
+          spectra_context: spectraContext,
         })
 
         if (agentMode) {
@@ -202,7 +213,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false)
       }
     },
-    [isLoading, sessionId, activeMaterials, agentMode, setSessionId, setMessages],
+    [isLoading, sessionId, activeMaterials, spectraContext, agentMode, setSessionId, setMessages],
   )
 
   const retryLast = useCallback(async () => {
@@ -220,6 +231,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       value={{
         activeMaterials,
         setActiveMaterials,
+        spectraContext,
+        setSpectraContext,
         sessionId,
         setSessionId,
         messages,

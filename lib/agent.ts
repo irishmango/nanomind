@@ -11,12 +11,13 @@ const ROUTING_PROMPT = `
 
 ## Question routing
 Before calling any tool, classify the question into one of these categories:
-- SPECTROSCOPY: Raman, FTIR, XRD, XPS, PL, peak positions, linewidths, mode assignments → answer from RAG + LLM only, never call materialsProject
+- SPECTROSCOPY: Raman, FTIR, XRD, XPS, PL peak analysis in isolation (e.g. "what does this peak mean?", "assign these modes") → answer from RAG + LLM only, do not call materialsProject
+- SPECTROSCOPY+DB: spectral data being validated or compared against a named material (e.g. "do these peaks match MoS₂?", "are these XRD reflections consistent with TiO₂?", "confirm phase identity") → call materialsProject to retrieve the material's crystal structure and properties as a reference, then cross-check against the spectrum
 - SYNTHESIS: CVD, ALD, sol-gel, growth conditions → RAG + LLM only, never call materialsProject
 - DATABASE: bandgap, crystal structure, space group, formation energy, lattice parameters → call materialsProject
 - LITERATURE: anything referencing a paper or experiment → RAG only, never call materialsProject
 
-Only call materialsProject for DATABASE category questions. For SPECTROSCOPY, SYNTHESIS, and LITERATURE categories, do not call any tools — answer using RAG context and LLM knowledge directly.
+Call materialsProject for DATABASE and SPECTROSCOPY+DB questions. For pure SPECTROSCOPY, SYNTHESIS, and LITERATURE categories, do not call any tools — answer using RAG context and LLM knowledge directly.
 
 Source priority: Always check the DOCUMENT CONTEXT section of the input first before deciding to call any tool. Only call a tool if the document context does not contain the answer.
 

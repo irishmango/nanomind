@@ -47,6 +47,16 @@ export async function DELETE(
   const { id } = await params
   const supabase = await createClient()
 
+  // notebook_entries has no ON DELETE CASCADE on its session_id FK, so clear it first
+  const { error: nbError } = await supabase
+    .from('notebook_entries')
+    .delete()
+    .eq('session_id', id)
+
+  if (nbError) {
+    return Response.json({ error: nbError.message }, { status: 500 })
+  }
+
   const { error } = await supabase.from('sessions').delete().eq('id', id)
 
   if (error) {

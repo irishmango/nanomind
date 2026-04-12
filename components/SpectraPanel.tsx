@@ -16,7 +16,7 @@ const SPECTRA_TYPES: { value: SpectraType; label: string }[] = [
 type Props = { fullWidth?: boolean }
 
 export default function SpectraPanel({ fullWidth = false }: Props) {
-  const { activeMaterials } = useChat()
+  const { activeMaterials, setSpectraContext } = useChat()
   const activeMaterial = activeMaterials[0] ?? null
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -37,6 +37,7 @@ export default function SpectraPanel({ fullWidth = false }: Props) {
     setAnnotation('')
     setParseError(null)
     setFilename(null)
+    setSpectraContext(null)
   }
 
   async function handleFile(file: File) {
@@ -53,6 +54,7 @@ export default function SpectraPanel({ fullWidth = false }: Props) {
       setSpectraData(data)
       setPeaks(detected)
       setFilename(file.name)
+      setSpectraContext({ peaks: detected, spectraType, filename: file.name })
     } catch (e) {
       setParseError(e instanceof Error ? e.message : 'Failed to parse file.')
     }

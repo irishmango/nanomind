@@ -65,7 +65,7 @@ const STRICT_RAG = true
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(request: Request) {
-  const { session_id, message, material_ids, materials: clientMaterials } = await request.json()
+  const { session_id, message, material_ids, materials: clientMaterials, spectra_context } = await request.json()
 
   if (!session_id || !message) {
     return Response.json({ error: 'session_id and message are required' }, { status: 400 })
@@ -126,13 +126,25 @@ export async function POST(request: Request) {
     }
   }
 
-  // 5. Build system prompt
-  let systemPrompt = NANOSCIENCE_SYSTEM_PROMPT + materialContext
+  // 5. Build spectra context block if a spectrum was uploaded
+  let spectraBlock = ''
+  if (spectra_context?.peaks?.length) {
+    const TYPE_LABELS: Record<string, string> = { raman: 'Raman', ftir: 'FTIR', xrd: 'XRD (X-ray diffraction)' }
+    const label = TYPE_LABELS[spectra_context.spectraType] ?? spectra_context.spectraType
+    const peakList = (spectra_context.peaks as Array<{ x: number; y: number }>)
+      .map((p, i) => `${i + 1}. x = ${p.x.toFixed(1)}, normalised intensity = ${p.y.toFixed(3)}`)
+      .join('\n')
+    spectraBlock = `\n\nUPLOADED SPECTRUM — ${label}${spectra_context.filename ? ` (${spectra_context.filename})` : ''}:\n${peakList}\n\nWhen the user's question relates to this spectrum, use the peak data above as the primary source.`
+  }
+
+  // 6. Build system prompt
+  let systemPrompt = NANOSCIENCE_SYSTEM_PROMPT + materialContext + spectraBlock
 
   if (ragContext) {
     systemPrompt += `
 
 RELEVANT LITERATURE CONTEXT:
+
 ${ragContext}
 
 STRICT INSTRUCTIONS FOR USING THIS CONTEXT:
