@@ -65,7 +65,7 @@ const STRICT_RAG = true
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(request: Request) {
-  const { session_id, message, material_ids } = await request.json()
+  const { session_id, message, material_ids, materials: clientMaterials } = await request.json()
 
   if (!session_id || !message) {
     return Response.json({ error: 'session_id and message are required' }, { status: 400 })
@@ -102,22 +102,17 @@ export async function POST(request: Request) {
     .reverse()
     .map(({ role, content }) => ({ role: role as 'user' | 'assistant', content }))
 
-  // 3. Fetch all selected materials and build combined context
+  // 3. Build material context from client-supplied data (avoids a redundant DB round-trip
+  //    and prevents silent RLS failures from stripping material context from the prompt)
   let materialContext = ''
-  if (ids.length > 0) {
-    const { data: materials } = await supabase
-      .from('materials')
-      .select('name, formula, description, tags')
-      .in('id', ids)
-
-    if (materials && materials.length > 0) {
-      materialContext = '\n\nActive material contexts:\n'
-      for (const m of materials) {
-        materialContext +=
-          `\n— ${m.name}${m.formula ? ` (${m.formula})` : ''}\n` +
-          `  Description: ${m.description ?? 'N/A'}\n` +
-          `  Tags: ${(m.tags ?? []).join(', ')}\n`
-      }
+  const passedMaterials = Array.isArray(clientMaterials) ? clientMaterials : []
+  if (passedMaterials.length > 0) {
+    materialContext = '\n\nActive material contexts:\n'
+    for (const m of passedMaterials) {
+      materialContext +=
+        `\n— ${m.name}${m.formula ? ` (${m.formula})` : ''}\n` +
+        `  Description: ${m.description ?? 'N/A'}\n` +
+        `  Tags: ${(m.tags ?? []).join(', ')}\n`
     }
   }
 

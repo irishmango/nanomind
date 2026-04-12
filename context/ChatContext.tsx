@@ -112,6 +112,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           session_id: sid,
           message: text,
           material_ids: activeMaterials.map((m) => m.id),
+          materials: activeMaterials,
         })
 
         if (agentMode) {

@@ -76,7 +76,13 @@ export default function Sidebar() {
   }
 
   async function handleDeleteSession(id: string) {
-    await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      console.error('[delete session] API error', res.status, body)
+      setConfirmDeleteSession(null)
+      return
+    }
     setSessions((prev) => prev.filter((s) => s.id !== id))
     if (sessionId === id) {
       setSessionId(null)
